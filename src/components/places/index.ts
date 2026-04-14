@@ -1,0 +1,1 @@
+export { PlacesSearchInput } from './PlacesSearchInput';
