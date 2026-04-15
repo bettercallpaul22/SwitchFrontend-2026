@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronDown, MapPin, X } from 'lucide-react-native';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { AppButton } from '../../../../components/ui/AppButton';
 import { AppText } from '../../../../components/ui/AppText';
@@ -46,11 +46,7 @@ export function VehicleView({
   canFindDriver,
 }: VehicleViewProps) {
   return (
-    <ScrollView
-      style={styles.vehicleScroll}
-      contentContainerStyle={styles.vehicleContent}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={{padding:16, gap:12}}>
 
       <View style={styles.vehicleRouteCard}>
         <View style={styles.vehicleRouteTopRow}>
@@ -237,6 +233,6 @@ export function VehicleView({
         disabled={!canFindDriver}
         style={styles.findDriverButton}
       />
-    </ScrollView>
+    </View>
   );
 }

@@ -411,6 +411,7 @@ export function PassengerHomeScreen() {
       topInset={insets.top}
       bottomInset={insets.bottom}
       isVehicleScreen={screen === 'vehicle'}
+      currentScreen={screen}
       onBackPress={onBackPress}
     >
       {screen === 'plan' ? (

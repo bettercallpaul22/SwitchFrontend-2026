@@ -73,6 +73,36 @@ const isoDateStringSchema = z
   .trim()
   .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a valid ISO date string');
 
+// Schema to handle Firestore Timestamp objects or ISO strings
+const firestoreDateSchema = z
+  .unknown()
+  .transform((val): string => {
+    // If it's already a string, return it
+    if (typeof val === 'string') {
+      return val;
+    }
+    
+    // Check if it's a Firestore Timestamp object with toDate method
+    if (val && typeof val === 'object' && '_seconds' in val) {
+      const timestamp = val as any;
+      try {
+        // Try calling toDate() if it exists
+        if (typeof timestamp.toDate === 'function') {
+          return timestamp.toDate().toISOString();
+        }
+        // Fallback: construct from _seconds
+        if (typeof timestamp._seconds === 'number') {
+          return new Date(timestamp._seconds * 1000).toISOString();
+        }
+      } catch (error) {
+        console.error('[firestoreDateSchema] Error converting timestamp:', error);
+      }
+    }
+    
+    // Fallback for unknown types
+    return new Date().toISOString();
+  });
+
 const basicProfileSchema = z
   .object({
     idNumber: requiredString('basicProfile.idNumber'),
@@ -158,16 +188,26 @@ const storedPassengerSchema = z
     email: z.string().email(),
     phone: phoneSchema,
     fcmToken: z.string().optional().default(''),
+    isOnline: z.boolean().optional().default(false),
+    isAvailable: z.boolean().optional().default(false),
+    activeRideId: z.string().trim().min(1).nullable().optional().default(null),
+    lastKnownLocation: z
+      .object({
+        lat: z.number().finite(),
+        lng: z.number().finite()
+      })
+      .optional(),
+    lastKnownGeohash: z.string().optional(),
+    lastLocationUpdatedAt: firestoreDateSchema.optional(),
     termsAccepted: z.literal(true),
-    createdAt: isoDateStringSchema,
-    updatedAt: isoDateStringSchema,
-    dateOfBirth: isoDateStringSchema.optional(),
+    createdAt: firestoreDateSchema,
+    updatedAt: firestoreDateSchema,
+    dateOfBirth: z.string().optional(),
     walletBalance: z.number().finite().default(0),
     switchCoinBalance: z.number().finite().default(0),
-    rideStatus: passengerRideStatusSchema,
-    activeRideId: z.string().trim().min(1).nullable()
+    rideStatus: passengerRideStatusSchema
   })
-  .strict();
+  .passthrough();
 
 const storedDriverSchema = z
   .object({
@@ -188,17 +228,18 @@ const storedDriverSchema = z
       })
       .optional(),
     lastKnownGeohash: z.string().optional(),
-    lastLocationUpdatedAt: isoDateStringSchema.optional(),
+    lastLocationUpdatedAt: firestoreDateSchema.optional(),
     termsAccepted: z.literal(true),
-    createdAt: isoDateStringSchema,
-    updatedAt: isoDateStringSchema,
+    createdAt: firestoreDateSchema,
+    updatedAt: firestoreDateSchema,
     ratingAverage: z.number().finite().min(0).max(5).default(0),
     ratingCount: z.number().int().min(0).default(0),
     completedTrips: z.number().int().min(0).default(0),
     basicProfile: basicProfileSchema.optional(),
     vehicleDetails: vehicleDetailsSchema.optional(),
     preference: preferenceSchema.optional()
-  });
+  })
+  .passthrough();
 
 const createServiceError = (status: number, code: ServiceErrorCode, message: string): ServiceError => {
   const error = new Error(message) as ServiceError;
@@ -274,6 +315,10 @@ const mapFirebaseError = (error: unknown): ServiceError => {
 const parsePassenger = (value: unknown): PassengerUserDocument => {
   const parsed = storedPassengerSchema.safeParse(value);
   if (!parsed.success) {
+    console.error('[authService] parsePassenger:validation-error', {
+      value: typeof value === 'object' ? (value as Record<string, unknown>) : value,
+      errors: parsed.error.flatten()
+    });
     throw createServiceError(500, 'INTERNAL_ERROR', 'Stored passenger profile has invalid format');
   }
 
@@ -293,6 +338,10 @@ const parsePassenger = (value: unknown): PassengerUserDocument => {
 const parseDriver = (value: unknown): DriverUserDocument => {
   const parsed = storedDriverSchema.safeParse(value);
   if (!parsed.success) {
+    console.error('[authService] parseDriver:validation-error', {
+      value: typeof value === 'object' ? (value as Record<string, unknown>) : value,
+      errors: parsed.error.flatten()
+    });
     throw createServiceError(500, 'INTERNAL_ERROR', 'Stored driver profile has invalid format');
   }
 
@@ -309,7 +358,16 @@ const getStoredUserById = async (userId: string): Promise<StoredUserDocument> =>
     console.log('[authService] getStoredUserById:found-passenger', {
       userId
     });
-    return parsePassenger(passengerSnapshot.data());
+    const passengerData = passengerSnapshot.data();
+    console.log('[authService] getStoredUserById:passenger-raw-data', {
+      data: passengerData,
+      keys: Object.keys(passengerData || {}),
+      dataTypes: passengerData ? Object.entries(passengerData).reduce((acc, [key, val]) => {
+        acc[key] = typeof val;
+        return acc;
+      }, {} as Record<string, string>) : {}
+    });
+    return parsePassenger(passengerData);
   }
 
   const driverSnapshot = await getDriverProfileDoc(userId);
@@ -317,7 +375,16 @@ const getStoredUserById = async (userId: string): Promise<StoredUserDocument> =>
     console.log('[authService] getStoredUserById:found-driver', {
       userId
     });
-    return parseDriver(driverSnapshot.data());
+    const driverData = driverSnapshot.data();
+    console.log('[authService] getStoredUserById:driver-raw-data', {
+      data: driverData,
+      keys: Object.keys(driverData || {}),
+      dataTypes: driverData ? Object.entries(driverData).reduce((acc, [key, val]) => {
+        acc[key] = typeof val;
+        return acc;
+      }, {} as Record<string, string>) : {}
+    });
+    return parseDriver(driverData);
   }
 
   console.log('[authService] getStoredUserById:not-found', {

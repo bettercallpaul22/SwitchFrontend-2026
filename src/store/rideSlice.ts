@@ -49,6 +49,19 @@ const toErrorMessage = (error: unknown): string => {
   return 'Unable to create ride request right now.';
 };
 
+const sanitizeRideLocation = (location: RideLocation): RideLocation => {
+  const sanitizedPlaceId =
+    typeof location.placeId === 'string' && location.placeId.trim().length > 0
+      ? location.placeId.trim()
+      : undefined;
+
+  return {
+    address: location.address,
+    ...(sanitizedPlaceId ? { placeId: sanitizedPlaceId } : {}),
+    coordinates: location.coordinates
+  };
+};
+
 export const createRideRequest = createAsyncThunk<
   RideRequest,
   { paymentMethod: string },
@@ -108,9 +121,9 @@ export const createRideRequest = createAsyncThunk<
     const payload: CreateRideRequestPayload = {
       passengerId: sessionUser.id,
       rideType: state.ride.rideType,
-      pickupLocation,
-      stopLocation: stopLocation ?? undefined,
-      destinationLocation,
+      pickupLocation: sanitizeRideLocation(pickupLocation),
+      stopLocation: stopLocation ? sanitizeRideLocation(stopLocation) : undefined,
+      destinationLocation: sanitizeRideLocation(destinationLocation),
       paymentMethod: arg.paymentMethod,
       rider: {
         id: sessionUser.id,

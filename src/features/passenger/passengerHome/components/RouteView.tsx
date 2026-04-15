@@ -41,7 +41,14 @@ export function RouteView({
     setRecentPlaces(places);
   };
 
-  const handleSelectDestination = async (location: RideLocation) => {
+  const handleSelectDestination = async (place: RideLocation | RecentPlace) => {
+    // Extract only the location fields, excluding timestamp or other extra properties
+    const location: RideLocation = {
+      address: place.address,
+      placeId: place.placeId,
+      coordinates: place.coordinates,
+    };
+
     // Update recent places storage
     const updated = await addRecentPlace(location);
     setRecentPlaces(updated);
@@ -50,7 +57,7 @@ export function RouteView({
   };
 
   return (
-    <>
+    <View style={{padding:16, gap:12}}>
       <View style={styles.routeCard}>
         <View style={styles.routeRow}>
           <AppText variant="xs" style={styles.routeLabel}>
@@ -133,6 +140,6 @@ export function RouteView({
         onPress={onContinue}
         disabled={!canContinueToVehicle}
       />
-    </>
+    </View>
   );
 }

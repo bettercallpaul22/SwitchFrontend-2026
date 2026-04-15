@@ -1,19 +1,28 @@
 import React, { useRef } from 'react';
-import { Animated, Dimensions, PanResponder, StatusBar, View } from 'react-native';
+import {
+  Animated,
+  Dimensions,
+  PanResponder,
+  StatusBar,
+  Text,
+  View,
+} from 'react-native';
 import type { Region } from 'react-native-maps';
 
 import { PassengerMap } from '../../../../components/maps';
 import { AppText } from '../../../../components/ui/AppText';
 import type { RideLocation } from '../../../../types/ride';
+import type { FlowScreen } from '../types';
 import { BackButton } from './BackButton';
 import { styles } from '../styles';
+import { BottomSheet1, BottomSheet2, BottomSheet3 } from './planner_sheets';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 // Snap points as fractions of screen height (sheet height)
 const SNAP_LARGE = SCREEN_HEIGHT * 0.82; // ~82% — default expanded
-const SNAP_MEDIUM = SCREEN_HEIGHT * 0.20; // 20%
-const SNAP_SMALL = SCREEN_HEIGHT * 0.10; // 10%
+const SNAP_MEDIUM = SCREEN_HEIGHT * 0.2; // 20%
+const SNAP_SMALL = SCREEN_HEIGHT * 0.1; // 10%
 
 function snapTo(value: number): number {
   const snaps = [SNAP_SMALL, SNAP_MEDIUM, SNAP_LARGE];
@@ -33,6 +42,7 @@ type PlannerLayoutProps = {
   topInset: number;
   bottomInset: number;
   isVehicleScreen: boolean;
+  currentScreen: FlowScreen;
   onBackPress: () => void;
   children: React.ReactNode;
 };
@@ -48,6 +58,7 @@ export function PlannerLayout({
   topInset,
   bottomInset,
   isVehicleScreen,
+  currentScreen,
   onBackPress,
   children,
 }: PlannerLayoutProps) {
@@ -114,29 +125,40 @@ export function PlannerLayout({
         </View>
       </View>
 
-      {/* Draggable bottom sheet */}
-      <Animated.View
-        style={[
-          styles.bottomSheet,
-          isVehicleScreen ? styles.bottomSheetVehicle : undefined,
-          {
-            paddingBottom: Math.max(16, bottomInset + 8),
-            // Override position: use height instead of maxHeight so drag works
-            height: sheetHeight,
-            maxHeight: undefined,
-          },
-        ]}
-      >
-        {/* Drag handle — only this area triggers the pan */}
-        <View {...panResponder.panHandlers} style={styles.dragHandleZone}>
-          <View style={styles.sheetHandle} />
-        </View>
-
-        {/* Scrollable content inside the sheet */}
-        <View style={{ flex: 1, overflow: 'hidden' }}>
+      {/* Draggable bottom sheet - conditionally rendered based on current screen */}
+      {(currentScreen === 'plan' || currentScreen === 'home') && (
+        <BottomSheet1
+          visible={true}
+          onClose={() => {}}
+          closeThresholdPercent={0.15}
+          height={430}
+          allowSheetDrag={false}
+        >
           {children}
-        </View>
-      </Animated.View>
+        </BottomSheet1>
+      )}
+
+      {currentScreen === 'route' && (
+        <BottomSheet2
+          visible={true}
+          onClose={() => {}}
+          closeThresholdPercent={10}
+          height={560}
+        >
+          {children}
+        </BottomSheet2>
+      )}
+
+      {(currentScreen === 'vehicle' || currentScreen === 'finding' || currentScreen === 'arrived' || currentScreen === 'en_route') && (
+        <BottomSheet3
+          visible={true}
+          onClose={() => {}}
+          closeThresholdPercent={0.15}
+          height={800}
+        >
+          {children}
+        </BottomSheet3>
+      )}
     </View>
   );
 }
