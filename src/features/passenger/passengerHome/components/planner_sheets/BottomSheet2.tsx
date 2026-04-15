@@ -5,7 +5,7 @@ import {
   View,
   Dimensions,
   StyleSheet,
-} from 'react-native' 
+} from 'react-native'
 import { appColors } from '../../../../../theme/colors'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
@@ -14,43 +14,54 @@ interface BottomSheetProps {
   visible: boolean
   onClose: () => void
   children: React.ReactNode
-  height?: number // ✅ OPTIONAL FIXED HEIGHT
+  height?: number
   closeThresholdPercent?: number
   allowSheetDrag?: boolean
   maxHeightPercent?: number
+  snapPoints?: number[]
 }
 
 export const BottomSheet2: React.FC<BottomSheetProps> = ({
   visible,
   onClose,
   children,
-  height, // 👈 optional override
-  closeThresholdPercent = 10,
+  height,
   allowSheetDrag = true,
   maxHeightPercent = 0.9,
+  snapPoints = [0],
 }) => {
   const [contentHeight, setContentHeight] = useState(0)
-
   const maxHeight = SCREEN_HEIGHT * maxHeightPercent
 
-  // ✅ decide final height
   const sheetHeight = height
     ? Math.min(height, maxHeight)
     : Math.min(contentHeight, maxHeight)
 
-  const translateY = useRef(new Animated.Value(maxHeight)).current
+  const translateY = useRef(new Animated.Value(sheetHeight || maxHeight)).current
   const offsetY = useRef(0)
 
-  // OPEN / CLOSE
+  // ✅ Keep refs in sync so PanResponder closures always read fresh values
+  const sheetHeightRef = useRef(sheetHeight)
+  const snapPointsRef = useRef(snapPoints)
+
+  useEffect(() => {
+    sheetHeightRef.current = sheetHeight
+  }, [sheetHeight])
+
+  useEffect(() => {
+    snapPointsRef.current = snapPoints
+  }, [snapPoints])
+
+  // Open / close animation
   useEffect(() => {
     if (!sheetHeight) return
-
     if (visible) {
+      const initialSnap = snapPoints[0] ?? 0
+      offsetY.current = initialSnap
       Animated.spring(translateY, {
-        toValue: 0,
+        toValue: initialSnap,
         useNativeDriver: true,
       }).start()
-      offsetY.current = 0
     } else {
       Animated.timing(translateY, {
         toValue: sheetHeight,
@@ -61,7 +72,6 @@ export const BottomSheet2: React.FC<BottomSheetProps> = ({
     }
   }, [visible, sheetHeight])
 
-  // PAN LOGIC
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
@@ -69,39 +79,43 @@ export const BottomSheet2: React.FC<BottomSheetProps> = ({
 
       onPanResponderMove: (_, g) => {
         if (!allowSheetDrag) return
-
-        let newY = offsetY.current + g.dy
-        if (newY < 0) newY = 0
-
+        const sorted = [...snapPointsRef.current].sort((a, b) => a - b)
+        const minY = sorted[0]
+        const maxY = sorted[sorted.length - 1]
+        const newY = Math.min(Math.max(offsetY.current + g.dy, minY), maxY)
         translateY.setValue(newY)
       },
 
       onPanResponderRelease: (_, g) => {
         if (!allowSheetDrag) return
+        const currentY = offsetY.current + g.dy
+        const sorted = [...snapPointsRef.current].sort((a, b) => a - b)
 
-        let finalY = offsetY.current + g.dy
-        if (finalY < 0) finalY = 0
+        let targetSnap: number
 
-        const threshold = sheetHeight * closeThresholdPercent
-        const shouldClose =
-          finalY > threshold || g.vy > 1.2
-
-        if (shouldClose) {
-          Animated.timing(translateY, {
-            toValue: sheetHeight,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(onClose)
-
-          offsetY.current = sheetHeight
+        if (g.vy > 0.5) {
+          // Fast swipe down → next point below
+          targetSnap = sorted.find((p) => p > currentY) ?? sorted[sorted.length - 1]
+        } else if (g.vy < -0.5) {
+          // Fast swipe up → next point above
+          targetSnap = [...sorted].reverse().find((p) => p < currentY) ?? sorted[0]
         } else {
-          Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start()
-
-          offsetY.current = 0
+          // Slow drag → nearest point
+          targetSnap = sorted.reduce((nearest, point) =>
+            Math.abs(point - currentY) < Math.abs(nearest - currentY)
+              ? point
+              : nearest
+          )
         }
+
+        // ✅ Update offset BEFORE animating
+        offsetY.current = targetSnap
+
+        Animated.spring(translateY, {
+          toValue: targetSnap,
+          useNativeDriver: true,
+          bounciness: 4,
+        }).start()
       },
     })
   ).current
@@ -114,7 +128,7 @@ export const BottomSheet2: React.FC<BottomSheetProps> = ({
         style={[
           styles.sheet,
           {
-            height: sheetHeight, // ✅ NOW SUPPORTS BOTH MODES
+            height: sheetHeight || maxHeight,
             maxHeight,
             transform: [{ translateY }],
           },
@@ -122,15 +136,11 @@ export const BottomSheet2: React.FC<BottomSheetProps> = ({
         {...(allowSheetDrag ? panResponder.panHandlers : {})}
       >
         {allowSheetDrag && <View style={styles.handle} />}
-
-        {/* only measure if height not provided */}
         <View
           onLayout={(e) => {
-            if (height) return // 👈 skip if fixed height
+            if (height) return
             const h = e.nativeEvent.layout.height
-            if (h !== contentHeight) {
-              setContentHeight(h)
-            }
+            if (h !== contentHeight) setContentHeight(h)
           }}
         >
           {children}

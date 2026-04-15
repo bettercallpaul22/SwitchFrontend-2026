@@ -127,37 +127,40 @@ export function PlannerLayout({
 
       {/* Draggable bottom sheet - conditionally rendered based on current screen */}
       {(currentScreen === 'plan' || currentScreen === 'home') && (
-        <BottomSheet1
+          <BottomSheet2
           visible={true}
           onClose={() => {}}
-          closeThresholdPercent={0.15}
           height={430}
-          allowSheetDrag={false}
+          snapPoints={[0, 200]} // 0=fully open, 200=mid, 500=nearly closed
         >
           {children}
-        </BottomSheet1>
+        </BottomSheet2>
+        
       )}
 
       {currentScreen === 'route' && (
         <BottomSheet2
           visible={true}
           onClose={() => {}}
-          closeThresholdPercent={10}
           height={560}
+          snapPoints={[0, 200, 300]} // 0=fully open, 200=mid, 500=nearly closed
         >
           {children}
         </BottomSheet2>
       )}
 
-      {(currentScreen === 'vehicle' || currentScreen === 'finding' || currentScreen === 'arrived' || currentScreen === 'en_route') && (
-        <BottomSheet3
+      {(currentScreen === 'vehicle' ||
+        currentScreen === 'finding' ||
+        currentScreen === 'arrived' ||
+        currentScreen === 'en_route') && (
+       <BottomSheet2
           visible={true}
           onClose={() => {}}
-          closeThresholdPercent={0.15}
-          height={800}
+          height={700}
+          snapPoints={[0, 480]} // 0=fully open, 200=mid, 500=nearly closed
         >
           {children}
-        </BottomSheet3>
+        </BottomSheet2>
       )}
     </View>
   );

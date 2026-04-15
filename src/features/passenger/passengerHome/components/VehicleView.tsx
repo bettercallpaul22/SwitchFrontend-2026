@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronDown, MapPin, X } from 'lucide-react-native';
-import { Pressable, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { AppButton } from '../../../../components/ui/AppButton';
 import { AppText } from '../../../../components/ui/AppText';
@@ -46,20 +46,20 @@ export function VehicleView({
   canFindDriver,
 }: VehicleViewProps) {
   return (
-    <View style={{padding:16, gap:12}}>
+    <View style={{padding:16, gap:2}}>
 
-      <View style={styles.vehicleRouteCard}>
+      <View style={[styles.vehicleRouteCard, ]}>
         <View style={styles.vehicleRouteTopRow}>
-          <MapPin color="#dbeafe" size={15} />
+          <MapPin color="#dbeafe" size={12} />
           <View style={styles.vehicleRouteTextWrap}>
             <AppText variant="xs" style={styles.vehicleRouteLabel}>
-              Start Location
+              Start
             </AppText>
-            <AppText variant="md" style={styles.vehicleRoutePrimaryValue}>
-              {startSummary}
+            <AppText variant="xs" style={styles.vehicleRoutePrimaryValue} numberOfLines={1}>
+              {startSummary?.substring(0, 40)}
             </AppText>
           </View>
-          <ChevronDown color="#94a3b8" size={15} />
+          <ChevronDown color="#94a3b8" size={12} />
         </View>
 
         <View style={styles.vehicleRouteDivider} />
@@ -67,13 +67,14 @@ export function VehicleView({
         <View style={styles.vehicleRouteMiddleRow}>
           <View style={styles.routeDot} />
           <AppText
-            variant="md"
+            variant="xs"
             style={[
               styles.vehicleRouteMiddleText,
               !stopLocation ? styles.vehicleRoutePlaceholder : undefined,
             ]}
+            numberOfLines={1}
           >
-            {stopSummary || 'add stop'}
+            {(stopSummary?.substring(0, 40)) || 'add stop'}
           </AppText>
           <Pressable
             onPress={onClearStop}
@@ -82,7 +83,7 @@ export function VehicleView({
               pressed ? styles.pressed : undefined,
             ]}
           >
-            <X color="#94a3b8" size={14} />
+            <X color="#94a3b8" size={12} />
           </Pressable>
           <Pressable
             onPress={onToggleStopPicker}
@@ -105,10 +106,10 @@ export function VehicleView({
           </View>
           <View style={styles.vehicleRouteTextWrap}>
             <AppText variant="xs" style={styles.vehicleRouteLabel}>
-              Your Destination
+              Destination
             </AppText>
-            <AppText variant="md" style={styles.vehicleRoutePrimaryValue}>
-              {destinationSummary}
+            <AppText variant="xs" style={styles.vehicleRoutePrimaryValue} numberOfLines={1}>
+              {destinationSummary?.substring(0, 40)}
             </AppText>
           </View>
           <Pressable
@@ -118,7 +119,7 @@ export function VehicleView({
               pressed ? styles.pressed : undefined,
             ]}
           >
-            <X color="#94a3b8" size={14} />
+            <X color="#94a3b8" size={12} />
           </Pressable>
         </View>
       </View>
