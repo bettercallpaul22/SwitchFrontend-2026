@@ -2,7 +2,15 @@ import type React from 'react';
 
 import type { RideLocation, RideType } from '../../../types/ride';
 
-export type FlowScreen = 'home' | 'plan' | 'route' | 'vehicle' | 'finding' | 'arrived' | 'en_route';
+export type FlowScreen =
+  | 'home'
+  | 'plan'
+  | 'route'
+  | 'vehicle'
+  | 'finding'
+  | 'accepted'
+  | 'arrived'
+  | 'en_route';
 
 export type PassengerHomeIcon = React.ComponentType<{
   size?: number;

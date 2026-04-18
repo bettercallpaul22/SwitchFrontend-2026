@@ -23,6 +23,7 @@
     "lucide-react-native": "^1.7.0",
     "react": "19.0.0",
     "react-native": "0.79.1",
+    "react-native-image-picker": "^8.2.1",
     "react-native-maps": "^1.20.1",
     "react-native-maps-directions": "^1.9.0",
     "react-native-permissions": "^5.5.1",

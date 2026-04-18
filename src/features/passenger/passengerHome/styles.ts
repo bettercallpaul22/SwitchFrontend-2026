@@ -1010,6 +1010,11 @@ export const styles = StyleSheet.create({
     color: '#c8dddd',
     fontWeight: '700',
   },
+  driverArriveCancelButton: {
+    marginTop: 4,
+    alignSelf: 'stretch',
+    borderRadius: 22,
+  },
   driverArriveMarkerPickup: {
     width: 30,
     height: 30,

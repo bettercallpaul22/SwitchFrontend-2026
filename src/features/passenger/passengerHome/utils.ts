@@ -20,7 +20,7 @@ export const getScreenTitle = (screen: FlowScreen) => {
     return 'Find Driver';
   }
 
-  if (screen === 'arrived') {
+  if (screen === 'accepted' || screen === 'arrived') {
     return 'Driver Arrived';
   }
 

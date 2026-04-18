@@ -4,7 +4,6 @@ import type {
   GeolocationError,
   GeolocationResponse
 } from '@react-native-community/geolocation';
-import type { LatLng } from 'react-native-maps';
 
 import type { RideRequestRoute } from '../../../components/maps';
 import { logout, updateDriverSessionLocation } from '../../../store/authSlice';
@@ -22,38 +21,19 @@ import {
   syncDriverLiveLocation,
   syncDriverPresence
 } from '../../../services/driverLocationService';
+import {
+  LOCATION_DISTANCE_THRESHOLD_IN_METERS,
+  GEOLOCATION_WATCHER_CONFIG,
+  GEOLOCATION_GET_POSITION_CONFIG,
+  buildDriverLiveLocation,
+  calculateDistanceInMeters
+} from '../../../utils/locationTracking';
 import { encodeGeohash } from '../../../utils/geohash';
 
 const SAMPLE_RIDE_REQUEST: RideRequestRoute = {
   pickupLocation: { latitude: 9.05785, longitude: 7.49508 },
   destinationLocation: { latitude: 9.04104, longitude: 7.48948 }
 };
-
-const LOCATION_DISTANCE_THRESHOLD_IN_METERS = 2;
-
-const toRadians = (value: number) => (value * Math.PI) / 180;
-
-const calculateDistanceInMeters = (from: LatLng, to: LatLng) => {
-  const earthRadius = 6371000;
-  const deltaLat = toRadians(to.latitude - from.latitude);
-  const deltaLng = toRadians(to.longitude - from.longitude);
-  const startLat = toRadians(from.latitude);
-  const endLat = toRadians(to.latitude);
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(startLat) * Math.cos(endLat) * Math.sin(deltaLng / 2) ** 2;
-  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
-
-const buildDriverLiveLocation = (position: GeolocationResponse): DriverLiveLocation => ({
-  latitude: position.coords.latitude,
-  longitude: position.coords.longitude,
-  heading: Number.isFinite(position.coords.heading) ? position.coords.heading : null,
-  speed: Number.isFinite(position.coords.speed) ? position.coords.speed : null,
-  accuracy: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
-  geohash: encodeGeohash(position.coords.latitude, position.coords.longitude),
-  updatedAt: new Date(position.timestamp).toISOString()
-});
 
 export function useDriverHomeState() {
   const dispatch = useAppDispatch();
@@ -117,11 +97,11 @@ export function useDriverHomeState() {
 
   const onLogout = useCallback(() => {
     if (session?.user.role === 'driver') {
-      void setDriverOfflineState(session.user.id).catch(() => undefined);
+      void setDriverOfflineState(session.user.id, currentLocation).catch(() => undefined);
     }
     dispatch(resetDriverLocationState());
     dispatch(logout());
-  }, [dispatch, session]);
+  }, [dispatch, session, currentLocation]);
 
   // Seed Redux with last known location from session on mount
   useEffect(() => {
@@ -230,22 +210,20 @@ export function useDriverHomeState() {
     };
 
     // One-shot fix so the map shows a pin immediately
-    Geolocation.getCurrentPosition(handlePositionSuccess, handlePositionError, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 5000
-    });
+    Geolocation.getCurrentPosition(
+      handlePositionSuccess,
+      handlePositionError,
+      GEOLOCATION_GET_POSITION_CONFIG
+    );
 
     // Configure watcher with better Android compatibility
     // Remove distanceFilter as it's unreliable on many Android devices
     // We'll handle distance filtering manually in the callback
-    watchIdRef.current = Geolocation.watchPosition(handlePositionSuccess, handlePositionError, {
-      enableHighAccuracy: true,
-      maximumAge: 3000,
-      timeout: 20000
-      // Note: distanceFilter is REMOVED because it doesn't work reliably on Android
-      // We handle distance filtering manually in the callback above
-    });
+    watchIdRef.current = Geolocation.watchPosition(
+      handlePositionSuccess,
+      handlePositionError,
+      GEOLOCATION_WATCHER_CONFIG
+    );
 
     return () => {
       if (watchIdRef.current !== null) {
@@ -265,9 +243,9 @@ export function useDriverHomeState() {
     isOnlineRef.current = isOnline;
 
     if (!isOnline && session?.user.role === 'driver') {
-      void setDriverOfflineState(session.user.id).catch(() => undefined);
+      void setDriverOfflineState(session.user.id, currentLocation).catch(() => undefined);
     }
-  }, [isOnline, session]);
+  }, [isOnline, session, currentLocation]);
 
   return {
     session,

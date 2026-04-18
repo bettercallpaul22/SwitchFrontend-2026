@@ -14,6 +14,8 @@ import {
 import { AuthState, authReducer } from './authSlice';
 import { driverLocationReducer } from './driverLocationSlice';
 import { driverRideRequestReducer } from './driverRideRequestSlice';
+import driverCurrentRideReducer from './driverCurrentRideSlice';
+import { passengerLocationReducer } from './passengerLocationSlice';
 import { rideReducer } from './rideSlice';
 
 const authPersistConfig = {
@@ -26,6 +28,8 @@ const rootReducer = combineReducers({
   auth: persistReducer<AuthState>(authPersistConfig, authReducer),
   driverLocation: driverLocationReducer,
   driverRideRequest: driverRideRequestReducer,
+  driverCurrentRide: driverCurrentRideReducer,
+  passengerLocation: passengerLocationReducer,
   ride: rideReducer
 });
 

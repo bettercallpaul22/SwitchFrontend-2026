@@ -1,15 +1,15 @@
+/**
+ * Driver Location Service
+ * Handles all driver location and presence synchronization with Firestore
+ */
+
 import { upsertDriverPresence } from '../api/firestoreApi';
 import type { DriverLiveLocation } from '../store/driverLocationSlice';
 
-export type DriverLocationSyncPayload = {
-  driverId: string;
-  location: DriverLiveLocation;
-  isOnline: boolean;
-  isAvailable: boolean;
-  activeRideId?: string | null;
-};
-
-type DriverPresenceSyncPayload = {
+/**
+ * Input shape for syncing driver presence
+ */
+export type DriverPresenceSyncInput = {
   driverId: string;
   isOnline: boolean;
   isAvailable: boolean;
@@ -17,57 +17,18 @@ type DriverPresenceSyncPayload = {
   location?: DriverLiveLocation | null;
 };
 
-const buildDriverPresencePayload = ({
-  driverId,
-  isOnline,
-  isAvailable,
-  activeRideId,
-  location,
-  updatedAt
-}: {
-  driverId: string;
-  isOnline: boolean;
-  isAvailable: boolean;
-  activeRideId: string | null;
-  location?: DriverLiveLocation | null;
-  updatedAt: string;
-}) => {
-  return {
-    driverId,
-    isOnline,
-    isAvailable,
-    activeRideId,
-    updatedAt,
-    ...(location
-      ? {
-          lat: location.latitude,
-          lng: location.longitude,
-          geohash: location.geohash,
-          heading: location.heading,
-          speed: location.speed,
-          accuracy: location.accuracy
-        }
-      : {})
-  };
-};
-
+/**
+ * Syncs driver presence (status + optional location) to Firestore
+ * Updates driver_locations collection with complete driver state
+ */
 export const syncDriverPresence = async ({
   driverId,
   isOnline,
   isAvailable,
   activeRideId = null,
-  location = null
-}: DriverPresenceSyncPayload) => {
+  location = null,
+}: DriverPresenceSyncInput) => {
   const updatedAt = location?.updatedAt ?? new Date().toISOString();
-
-  const driverLocationPayload = buildDriverPresencePayload({
-    driverId,
-    isOnline,
-    isAvailable,
-    activeRideId,
-    location,
-    updatedAt
-  });
 
   await upsertDriverPresence({
     driverId,
@@ -75,33 +36,49 @@ export const syncDriverPresence = async ({
     isAvailable,
     activeRideId,
     updatedAt,
-    location
+    location,
   });
-
-  return driverLocationPayload;
 };
 
+/**
+ * Syncs driver's current location with existing status
+ * Used during location watcher updates
+ */
 export const syncDriverLiveLocation = async ({
   driverId,
   location,
-  isOnline,
+  isOnline = true,
   isAvailable,
-  activeRideId = null
-}: DriverLocationSyncPayload) => {
-  return syncDriverPresence({
+  activeRideId = null,
+}: {
+  driverId: string;
+  location: DriverLiveLocation;
+  isOnline?: boolean;
+  isAvailable: boolean;
+  activeRideId?: string | null;
+}) => {
+  await syncDriverPresence({
     driverId,
     isOnline,
     isAvailable,
     activeRideId,
-    location
+    location,
   });
 };
 
-export const setDriverOfflineState = async (driverId: string) => {
+/**
+ * Sets driver offline status
+ * Preserves last known location in database
+ */
+export const setDriverOfflineState = async (
+  driverId: string,
+  location?: DriverLiveLocation | null,
+) => {
   await syncDriverPresence({
     driverId,
     isOnline: false,
     isAvailable: false,
-    activeRideId: null
+    activeRideId: null,
+    location: location ?? null,
   });
 };

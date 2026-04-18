@@ -1,30 +1,22 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo } from 'react';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import {
-  Animated,
-  Image,
-  PanResponder,
-  Pressable,
-  StatusBar,
-  View,
-  useWindowDimensions,
-} from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
-import {
-  BadgeCheck,
   Bell,
   CarFront,
   ChevronDown,
   Circle,
   MapPin,
   MessageCircleMore,
+  PhoneCall,
   Wallet2,
 } from 'lucide-react-native';
+import type { Region } from 'react-native-maps';
 
+import { AppButton } from '../../../../components/ui/AppButton';
 import { AppText } from '../../../../components/ui/AppText';
-import { DRIVER_MAP_STYLE } from '../../../driver/constants/mapStyle';
-import { appColors } from '../../../../theme/colors';
 import type { RideLocation, RideType } from '../../../../types/ride';
-import { BackButton } from './BackButton';
+import { getScreenTitle } from '../utils';
+import { PlannerLayout } from './PlannerLayout';
 import { styles } from '../styles';
 
 type DriverArriveScreenProps = {
@@ -39,6 +31,8 @@ type DriverArriveScreenProps = {
   switchCoinBalance: number;
   paymentMethod: string;
   driverName: string;
+  avatarLabel?: string;
+  currentScreen?: 'accepted' | 'arrived';
   driverAvatarUrl?: string | null;
   driverRating?: number;
   completedTrips?: number;
@@ -50,9 +44,9 @@ type DriverArriveScreenProps = {
   onOpenChat?: () => void;
   onOpenNotifications?: () => void;
   onChangePaymentMethod?: () => void;
+  onCancelRide: () => void;
+  cancelLoading: boolean;
 };
-
-const COLLAPSED_SHEET_HEIGHT = 330;
 
 function DriverArriveScreenComponent({
   visible = true,
@@ -66,6 +60,8 @@ function DriverArriveScreenComponent({
   switchCoinBalance,
   paymentMethod,
   driverName,
+  avatarLabel = 'ME',
+  currentScreen = 'arrived',
   driverAvatarUrl,
   driverRating = 4.9,
   completedTrips = 1599,
@@ -77,65 +73,12 @@ function DriverArriveScreenComponent({
   onOpenChat,
   onOpenNotifications,
   onChangePaymentMethod,
+  onCancelRide,
+  cancelLoading,
 }: DriverArriveScreenProps) {
-  const { height } = useWindowDimensions();
-  const maxSheetHeight = Math.min(height * 0.72, 560) + bottomInset;
-  const [headerHeight, setHeaderHeight] = useState(0);
-  const [bodyHeight, setBodyHeight] = useState(0);
-  const sheetHeight = Math.min(headerHeight + bodyHeight, maxSheetHeight);
-  const collapsedVisibleHeight = Math.min(
-    Math.max(headerHeight + 220, COLLAPSED_SHEET_HEIGHT),
-    sheetHeight || COLLAPSED_SHEET_HEIGHT,
-  );
-  const renderedSheetHeight = Math.max(sheetHeight, collapsedVisibleHeight);
-  const collapsedOffset = Math.max(sheetHeight - collapsedVisibleHeight, 0);
-  const translateY = useRef(new Animated.Value(collapsedOffset)).current;
-  const dragOffset = useRef(collapsedOffset);
-
-  useEffect(() => {
-    translateY.stopAnimation((value) => {
-      const nextValue =
-        typeof value === 'number' ? Math.min(Math.max(value, 0), collapsedOffset) : collapsedOffset;
-      translateY.setValue(nextValue);
-      dragOffset.current = nextValue;
-    });
-  }, [collapsedOffset, translateY, visible]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          Math.abs(gestureState.dy) > 6 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-        onPanResponderGrant: () => {
-          translateY.stopAnimation((value) => {
-            dragOffset.current = typeof value === 'number' ? value : collapsedOffset;
-          });
-        },
-        onPanResponderMove: (_, gestureState) => {
-          const next = Math.min(
-            Math.max(dragOffset.current + gestureState.dy, 0),
-            collapsedOffset,
-          );
-          translateY.setValue(next);
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          const current = dragOffset.current + gestureState.dy;
-          const shouldExpand = gestureState.vy < -0.4 || current < collapsedOffset / 2;
-
-          Animated.spring(translateY, {
-            toValue: shouldExpand ? 0 : collapsedOffset,
-            useNativeDriver: true,
-            tension: 80,
-            friction: 14,
-          }).start(({ finished }) => {
-            if (finished) {
-              dragOffset.current = shouldExpand ? 0 : collapsedOffset;
-            }
-          });
-        },
-      }),
-    [collapsedOffset, translateY],
-  );
+  if (!visible) {
+    return null;
+  }
 
   const startAddress = pickupLocation?.address ?? 'Afri Hotel, CBD';
   const stopAddress = stopLocation?.address ?? 'Utako Modern Market, Utako';
@@ -143,320 +86,239 @@ function DriverArriveScreenComponent({
   const vehicleTitle = rideType === 'shared' ? 'Switch Cab Regular' : 'Switch Cab Medium';
   const paymentTitle = paymentMethod === 'cash' ? 'Cash Payment' : 'Switch Wallet';
   const coinCopy = `You have ${switchCoinBalance.toLocaleString()} Switch Coins`;
-  const driverInitials = driverName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(part => part[0]?.toUpperCase())
-    .join('') || 'DR';
+  const driverInitials =
+    driverName
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'DR';
 
   return (
-    <View style={[styles.driverArriveScreen, !visible ? styles.hiddenScreen : null]}>
-      {visible ? (
-        <StatusBar barStyle="light-content" backgroundColor="#060708" />
-      ) : null}
-
-      <MapView
-        style={styles.map}
-        region={mapRegion}
-        customMapStyle={DRIVER_MAP_STYLE}
-        showsCompass={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
-        toolbarEnabled={false}
+    <PlannerLayout
+      title={getScreenTitle(currentScreen)}
+      avatarLabel={avatarLabel}
+      mapRegion={mapRegion}
+      pickupLocation={pickupLocation}
+      stopLocation={stopLocation}
+      destinationLocation={destinationLocation}
+      showPolyline={true}
+      topInset={topInset}
+      bottomInset={bottomInset}
+      isVehicleScreen={false}
+      currentScreen={currentScreen}
+      onBackPress={onBackPress}
+    >
+      <ScrollView
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.driverArriveSheetBodyContent,
+          { paddingBottom: Math.max(48, bottomInset + 28) },
+        ]}
       >
-        {pickupLocation ? (
-          <Marker coordinate={pickupLocation.coordinates} title="Pickup" description={pickupLocation.address}>
-            <View style={styles.driverArriveMarkerPickup}>
-              <MapPin color="#ffffff" size={14} />
+        <View style={styles.driverArriveEtaStrip}>
+          <AppText variant="sm" style={styles.driverArriveEtaText}>
+            {driverName.split(' ')[0]} will arrive in {etaMinutes} minutes
+          </AppText>
+        </View>
+
+        <View style={styles.driverArrivePrimaryPanel}>
+          <View style={styles.driverArriveVehicleCard}>
+            <View style={styles.driverArriveVehicleBadge}>
+              <CarFront color="#facc15" size={22} strokeWidth={2} />
+              <View style={styles.driverArriveSeatBadge}>
+                <AppText variant="xs" style={styles.driverArriveSeatBadgeText}>
+                  {rideType === 'shared' ? '4' : '2'}
+                </AppText>
+              </View>
             </View>
-          </Marker>
-        ) : null}
 
-        {stopLocation ? (
-          <Marker coordinate={stopLocation.coordinates} title="Stop" description={stopLocation.address}>
-            <View style={styles.driverArriveMarkerStop}>
-              <Circle color="#ffffff" size={12} strokeWidth={3} />
+            <View style={styles.driverArriveVehicleMeta}>
+              <AppText variant="md" style={styles.driverArriveVehicleTitle}>
+                {vehicleTitle}
+              </AppText>
+              <AppText variant="xs" style={styles.driverArriveVehicleSubtitle}>
+                {vehicleDescription} · {vehiclePlate}
+              </AppText>
             </View>
-          </Marker>
-        ) : null}
 
-        {destinationLocation ? (
-          <Marker
-            coordinate={destinationLocation.coordinates}
-            title="Destination"
-            description={destinationLocation.address}
-          >
-            <View style={styles.driverArriveMarkerDestination} />
-          </Marker>
-        ) : null}
-      </MapView>
-
-      <View style={[styles.driverArriveTopOverlay, { paddingTop: topInset + 8 }]}>
-        <View style={styles.driverArriveTopRow}>
-          <BackButton onPress={onBackPress} />
-
-          <View style={styles.driverArriveStatusPill}>
-            <View style={styles.driverArriveStatusIcon}>
-              <BadgeCheck color={appColors.primary} size={16} strokeWidth={2.5} />
-            </View>
-            <AppText variant="sm" style={styles.driverArriveStatusText}>
-              Get ready, the driver will arrive soon
+            <AppText variant="xl" style={styles.driverArriveVehiclePrice}>
+              NGN 5,500
             </AppText>
           </View>
 
-          <View style={styles.driverArriveMiniAvatar}>
-            {driverAvatarUrl ? (
-              <Image source={{ uri: driverAvatarUrl }} style={styles.driverArriveMiniAvatarImage} />
-            ) : (
-              <AppText variant="xs" style={styles.driverArriveMiniAvatarLabel}>
-                {driverInitials}
-              </AppText>
-            )}
-            <View style={styles.driverArriveMiniAvatarBadge} />
-          </View>
-        </View>
-      </View>
+          <View style={styles.driverArriveDriverCard}>
+            <View style={styles.driverArriveDriverMain}>
+              <View style={styles.driverArriveDriverAvatar}>
+                {driverAvatarUrl ? (
+                  <Image source={{ uri: driverAvatarUrl }} style={styles.driverArriveDriverAvatarImage} />
+                ) : (
+                  <AppText variant="sm" style={styles.driverArriveDriverAvatarLabel}>
+                    {driverInitials}
+                  </AppText>
+                )}
 
-      <View
-        style={[
-          styles.driverArriveDestinationWrap,
-          { bottom: collapsedVisibleHeight + bottomInset + 18 },
-        ]}
-      >
-        <View style={styles.driverArriveDestinationThumb}>
-          <MapPin color="#f8fafc" size={14} />
-        </View>
-        <AppText variant="sm" style={styles.driverArriveDestinationText}>
-          {destinationAddress}
-        </AppText>
-      </View>
-
-      <Animated.View
-        style={[
-          styles.driverArriveSheetModal,
-          {
-            height: renderedSheetHeight,
-            transform: [{ translateY }],
-          },
-        ]}
-      >
-        <View
-          {...panResponder.panHandlers}
-          onLayout={(event) => {
-            const nextHeight = event.nativeEvent.layout.height;
-
-            if (Math.abs(nextHeight - headerHeight) > 1) {
-              setHeaderHeight(nextHeight);
-            }
-          }}
-        >
-          <View style={styles.driverArriveEtaStrip}>
-            <AppText variant="sm" style={styles.driverArriveEtaText}>
-              {driverName.split(' ')[0]} will arrive in {etaMinutes} minutes
-            </AppText>
-          </View>
-
-          <View style={styles.driverArriveHandle} />
-        </View>
-
-        <Animated.ScrollView
-          bounces={sheetHeight >= maxSheetHeight}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={sheetHeight >= maxSheetHeight}
-          contentContainerStyle={[
-            styles.driverArriveSheetBodyContent,
-            { paddingBottom: Math.max(48, bottomInset + 28) },
-          ]}
-        >
-          <View
-            onLayout={(event) => {
-              const nextHeight = event.nativeEvent.layout.height;
-
-              if (Math.abs(nextHeight - bodyHeight) > 1) {
-                setBodyHeight(nextHeight);
-              }
-            }}
-            style={styles.driverArrivePrimaryPanel}
-          >
-            <View style={styles.driverArriveVehicleCard}>
-              <View style={styles.driverArriveVehicleBadge}>
-                <CarFront color="#facc15" size={22} strokeWidth={2} />
-                <View style={styles.driverArriveSeatBadge}>
-                  <AppText variant="xs" style={styles.driverArriveSeatBadgeText}>
-                    {rideType === 'shared' ? '4' : '2'}
+                <View style={styles.driverArriveRatingBadge}>
+                  <AppText variant="xs" style={styles.driverArriveRatingText}>
+                    {driverRating.toFixed(1)}
                   </AppText>
                 </View>
               </View>
 
-              <View style={styles.driverArriveVehicleMeta}>
-                <AppText variant="md" style={styles.driverArriveVehicleTitle}>
-                  {vehicleTitle}
+              <View style={styles.driverArriveDriverMeta}>
+                <AppText variant="md" style={styles.driverArriveDriverName}>
+                  {driverName}
                 </AppText>
-                <AppText variant="xs" style={styles.driverArriveVehicleSubtitle}>
-                  {vehicleDescription} · {vehiclePlate}
-                </AppText>
-              </View>
-
-              <AppText variant="xl" style={styles.driverArriveVehiclePrice}>
-                NGN 5,500
-              </AppText>
-            </View>
-
-            <View style={styles.driverArriveDriverCard}>
-              <View style={styles.driverArriveDriverMain}>
-                <View style={styles.driverArriveDriverAvatar}>
-                  {driverAvatarUrl ? (
-                    <Image source={{ uri: driverAvatarUrl }} style={styles.driverArriveDriverAvatarImage} />
-                  ) : (
-                    <AppText variant="sm" style={styles.driverArriveDriverAvatarLabel}>
-                      {driverInitials}
-                    </AppText>
-                  )}
-
-                  <View style={styles.driverArriveRatingBadge}>
-                    <AppText variant="xs" style={styles.driverArriveRatingText}>
-                      {driverRating.toFixed(1)}
-                    </AppText>
-                  </View>
-                </View>
-
-                <View style={styles.driverArriveDriverMeta}>
-                  <AppText variant="md" style={styles.driverArriveDriverName}>
-                    {driverName}
+                <View style={styles.driverArriveDriverSubRow}>
+                  <AppText variant="xs" style={styles.driverArriveDriverSubtext}>
+                    Top Rated Driver
                   </AppText>
-                  <View style={styles.driverArriveDriverSubRow}>
-                    <AppText variant="xs" style={styles.driverArriveDriverSubtext}>
-                      Top Rated Driver
-                    </AppText>
-                    <AppText
-                      variant="xs"
-                      style={[
-                        styles.driverArriveDriverSubtext,
-                        { marginLeft: 8, color: '#fff', textDecorationLine: 'underline' },
-                      ]}
-                    >
-                      {completedTrips} rides
-                    </AppText>
-                  </View>
+                  <AppText
+                    variant="xs"
+                    style={[
+                      styles.driverArriveDriverSubtext,
+                      { marginLeft: 8, color: '#fff', textDecorationLine: 'underline' },
+                    ]}
+                  >
+                    {completedTrips} rides
+                  </AppText>
                 </View>
-              </View>
-
-              <View style={styles.driverArriveActionRow}>
-                <Pressable
-                  onPress={onOpenChat}
-                  style={({ pressed }) => [
-                    styles.driverArriveActionButton,
-                    pressed ? styles.pressed : undefined,
-                  ]}
-                >
-                  <MessageCircleMore color="#f8fafc" size={17} />
-                </Pressable>
-
-                <Pressable
-                  onPress={onOpenNotifications}
-                  style={({ pressed }) => [
-                    styles.driverArriveActionButton,
-                    pressed ? styles.pressed : undefined,
-                  ]}
-                >
-                  <Bell color="#f8fafc" size={17} />
-                  <View style={styles.driverArriveAlertBadge}>
-                    <AppText variant="xs" style={styles.driverArriveAlertBadgeText}>
-                      2
-                    </AppText>
-                  </View>
-                </Pressable>
               </View>
             </View>
 
-            <View style={styles.driverArriveRouteCard}>
-              <View style={styles.driverArriveRouteRow}>
-                <MapPin color="#cfe4df" size={14} />
-                <View style={styles.driverArriveRouteCopy}>
-                  <AppText variant="xs" style={styles.driverArriveRouteLabel}>
-                    Start Location
-                  </AppText>
-                  <AppText variant="md" style={styles.driverArriveRouteValue}>
-                    {startAddress}
-                  </AppText>
-                </View>
-                <ChevronDown color="#8db6af" size={16} />
-              </View>
-
-              <View style={styles.driverArriveRouteDivider} />
-
-              <View style={styles.driverArriveRouteRow}>
-                <Circle color="#dbe9e6" size={12} strokeWidth={2.5} />
-                <View style={styles.driverArriveRouteCopy}>
-                  <AppText variant="md" style={styles.driverArriveRouteValue}>
-                    {stopAddress}
-                  </AppText>
-                </View>
-                <AppText variant="sm" style={styles.driverArriveRouteAction}>
-                  ×
-                </AppText>
-                <View style={styles.driverArriveAddStop}>
-                  <AppText variant="xs" style={styles.driverArriveAddStopText}>
-                    +
-                  </AppText>
-                </View>
-              </View>
-
-              <View style={styles.driverArriveRouteDivider} />
-
-              <View style={styles.driverArriveRouteRow}>
-                <View style={styles.driverArriveDestinationDot} />
-                <View style={styles.driverArriveRouteCopy}>
-                  <AppText variant="xs" style={styles.driverArriveRouteLabel}>
-                    Your Destination
-                  </AppText>
-                  <AppText variant="md" style={styles.driverArriveRouteValue}>
-                    {destinationAddress}
-                  </AppText>
-                </View>
-                <AppText variant="sm" style={styles.driverArriveRouteAction}>
-                  ×
-                </AppText>
-              </View>
-            </View>
-
-            <View style={styles.driverArriveSectionHeader}>
-              <AppText variant="lg" style={styles.driverArriveSectionTitle}>
-                Payment Method
-              </AppText>
-            </View>
-
-            <View style={styles.driverArrivePaymentCard}>
-              <View style={styles.driverArrivePaymentBadge}>
-                <Wallet2 color="#d8ece7" size={16} />
-              </View>
-
-              <View style={styles.driverArrivePaymentCopy}>
-                <AppText variant="lg" style={styles.driverArrivePaymentTitle}>
-                  {paymentTitle}
-                </AppText>
-                <AppText variant="sm" style={styles.driverArrivePaymentSubtitle}>
-                  {coinCopy}
-                </AppText>
-              </View>
-
+            <View style={styles.driverArriveActionRow}>
               <Pressable
-                onPress={onChangePaymentMethod}
+                onPress={onCallDriver}
                 style={({ pressed }) => [
-                  styles.driverArrivePaymentAction,
+                  styles.driverArriveActionButton,
                   pressed ? styles.pressed : undefined,
                 ]}
               >
-                <AppText variant="xs" style={styles.driverArrivePaymentActionText}>
-                  Change
-                </AppText>
+                <PhoneCall color="#f8fafc" size={17} />
+              </Pressable>
+
+              <Pressable
+                onPress={onOpenChat}
+                style={({ pressed }) => [
+                  styles.driverArriveActionButton,
+                  pressed ? styles.pressed : undefined,
+                ]}
+              >
+                <MessageCircleMore color="#f8fafc" size={17} />
+              </Pressable>
+
+              <Pressable
+                onPress={onOpenNotifications}
+                style={({ pressed }) => [
+                  styles.driverArriveActionButton,
+                  pressed ? styles.pressed : undefined,
+                ]}
+              >
+                <Bell color="#f8fafc" size={17} />
+                <View style={styles.driverArriveAlertBadge}>
+                  <AppText variant="xs" style={styles.driverArriveAlertBadgeText}>
+                    2
+                  </AppText>
+                </View>
               </Pressable>
             </View>
           </View>
-        </Animated.ScrollView>
-      </Animated.View>
-    </View>
+
+          <View style={styles.driverArriveRouteCard}>
+            <View style={styles.driverArriveRouteRow}>
+              <MapPin color="#cfe4df" size={14} />
+              <View style={styles.driverArriveRouteCopy}>
+                <AppText variant="xs" style={styles.driverArriveRouteLabel}>
+                  Start Location
+                </AppText>
+                <AppText variant="md" style={styles.driverArriveRouteValue}>
+                  {startAddress}
+                </AppText>
+              </View>
+              <ChevronDown color="#8db6af" size={16} />
+            </View>
+
+            <View style={styles.driverArriveRouteDivider} />
+
+            <View style={styles.driverArriveRouteRow}>
+              <Circle color="#dbe9e6" size={12} strokeWidth={2.5} />
+              <View style={styles.driverArriveRouteCopy}>
+                <AppText variant="md" style={styles.driverArriveRouteValue}>
+                  {stopAddress}
+                </AppText>
+              </View>
+              <AppText variant="sm" style={styles.driverArriveRouteAction}>
+                ×
+              </AppText>
+              <View style={styles.driverArriveAddStop}>
+                <AppText variant="xs" style={styles.driverArriveAddStopText}>
+                  +
+                </AppText>
+              </View>
+            </View>
+
+            <View style={styles.driverArriveRouteDivider} />
+
+            <View style={styles.driverArriveRouteRow}>
+              <View style={styles.driverArriveDestinationDot} />
+              <View style={styles.driverArriveRouteCopy}>
+                <AppText variant="xs" style={styles.driverArriveRouteLabel}>
+                  Your Destination
+                </AppText>
+                <AppText variant="md" style={styles.driverArriveRouteValue}>
+                  {destinationAddress}
+                </AppText>
+              </View>
+              <AppText variant="sm" style={styles.driverArriveRouteAction}>
+                ×
+              </AppText>
+            </View>
+          </View>
+
+          <View style={styles.driverArriveSectionHeader}>
+            <AppText variant="lg" style={styles.driverArriveSectionTitle}>
+              Payment Method
+            </AppText>
+          </View>
+
+          <View style={styles.driverArrivePaymentCard}>
+            <View style={styles.driverArrivePaymentBadge}>
+              <Wallet2 color="#d8ece7" size={16} />
+            </View>
+
+            <View style={styles.driverArrivePaymentCopy}>
+              <AppText variant="lg" style={styles.driverArrivePaymentTitle}>
+                {paymentTitle}
+              </AppText>
+              <AppText variant="sm" style={styles.driverArrivePaymentSubtitle}>
+                {coinCopy}
+              </AppText>
+            </View>
+
+            <Pressable
+              onPress={onChangePaymentMethod}
+              style={({ pressed }) => [
+                styles.driverArrivePaymentAction,
+                pressed ? styles.pressed : undefined,
+              ]}
+            >
+              <AppText variant="xs" style={styles.driverArrivePaymentActionText}>
+                Change
+              </AppText>
+            </Pressable>
+          </View>
+
+          <AppButton
+            title={cancelLoading ? 'Cancelling...' : 'Cancel Ride'}
+            variant="danger"
+            onPress={onCancelRide}
+            loading={cancelLoading}
+            style={styles.driverArriveCancelButton}
+          />
+        </View>
+      </ScrollView>
+    </PlannerLayout>
   );
 }
 

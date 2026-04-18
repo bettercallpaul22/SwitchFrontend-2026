@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '../../../components/ui/AppButton';
 import { AppInput } from '../../../components/ui/AppInput';
 import { AppText } from '../../../components/ui/AppText';
+import { ImagePickerInput } from '../components/ImagePickerInput';
 import { updateDriverProfile } from '../../../store/authSlice';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import type { DriverProfileUpdatePayload, DriverUser, EarningPreference } from '../../../types/auth';
@@ -91,16 +92,16 @@ const validateDriverInformation = (values: DriverInformationFormValues): string 
     return 'Driver license number / NIN is required';
   }
 
-  if (!values.driverLicenseUrl.trim() || !isValidHttpUrl(values.driverLicenseUrl.trim())) {
-    return 'Provide a valid Driver\'s License URL';
+  if (!values.driverLicenseUrl?.trim()) {
+    return 'Driver\'s License photo is required';
   }
 
-  if (!values.profilePhotoUrl.trim() || !isValidHttpUrl(values.profilePhotoUrl.trim())) {
-    return 'Provide a valid Driver\'s Profile Photo URL';
+  if (!values.profilePhotoUrl?.trim()) {
+    return 'Driver\'s Profile Photo is required';
   }
 
-  if (!values.ninSlipUrl.trim() || !isValidHttpUrl(values.ninSlipUrl.trim())) {
-    return 'Provide a valid NIN Slip URL';
+  if (!values.ninSlipUrl?.trim()) {
+    return 'NIN Slip photo is required';
   }
 
   if (
@@ -239,31 +240,34 @@ export function DriverProfileSetupScreen({ onBack }: DriverProfileSetupScreenPro
                 onChangeText={(value) => onChangeField('idNumber', value)}
               />
 
-              <AppInput
-                variant="dark"
-                label="Driver's License URL"
-                placeholder="https://..."
+              <ImagePickerInput
+                label="Driver's License Photo"
+                sublabel="Upload a clear photo of your driver's license"
+                userId={driverUser?.id || ''}
+                bucketType="DRIVER_LICENSES"
                 value={driverInformationValues.driverLicenseUrl}
-                onChangeText={(value) => onChangeField('driverLicenseUrl', value)}
-                autoCapitalize="none"
+                onImageSelected={(downloadUrl) => onChangeField('driverLicenseUrl', downloadUrl)}
+                disabled={!driverUser}
               />
 
-              <AppInput
-                variant="dark"
-                label="Driver's Profile Photo URL"
-                placeholder="https://..."
+              <ImagePickerInput
+                label="Driver's Profile Photo"
+                sublabel="Upload a clear, well-lit photo of yourself"
+                userId={driverUser?.id || ''}
+                bucketType="DRIVER_PROFILES"
                 value={driverInformationValues.profilePhotoUrl}
-                onChangeText={(value) => onChangeField('profilePhotoUrl', value)}
-                autoCapitalize="none"
+                onImageSelected={(downloadUrl) => onChangeField('profilePhotoUrl', downloadUrl)}
+                disabled={!driverUser}
               />
 
-              <AppInput
-                variant="dark"
-                label="NIN Slip URL"
-                placeholder="https://..."
+              <ImagePickerInput
+                label="NIN Slip Photo"
+                sublabel="Upload a clear photo of your NIN slip"
+                userId={driverUser?.id || ''}
+                bucketType="DRIVER_NIN_SLIPS"
                 value={driverInformationValues.ninSlipUrl}
-                onChangeText={(value) => onChangeField('ninSlipUrl', value)}
-                autoCapitalize="none"
+                onImageSelected={(downloadUrl) => onChangeField('ninSlipUrl', downloadUrl)}
+                disabled={!driverUser}
               />
 
               <View style={styles.divider} />

@@ -25,7 +25,7 @@ import {
 } from './src/store/authSlice';
 import { useAppSelector } from './src/store/hooks';
 import { persistor, store } from './src/store';
-import { listenToActivePassengerRide } from './src/listeners';
+import { listenToActivePassengerRide, listenToRiderData } from './src/listeners';
 import { setRide } from './src/store/rideSlice';
 import { syncCurrentUserFcmToken } from './src/services/authService';
 import { DriverRideRequestSheetHost } from './src/components/bottomsheets';
@@ -33,6 +33,7 @@ import { DriverRideRequestSheetHost } from './src/components/bottomsheets';
 function RootNavigator() {
   const { session } = useAppSelector((state) => state.auth);
   const unsubscribeRideRef = useRef<(() => void) | null>(null);
+  const unsubscribeRiderRef = useRef<(() => void) | null>(null);
   const unsubscribeTokenRefreshRef = useRef<(() => void) | null>(null);
   const [authReady, setAuthReady] = React.useState(false);
 
@@ -72,13 +73,15 @@ function RootNavigator() {
       // Clean up any previous ride listener
       unsubscribeRideRef.current?.();
       unsubscribeRideRef.current = null;
+      unsubscribeRiderRef.current?.();
+      unsubscribeRiderRef.current = null;
       unsubscribeTokenRefreshRef.current?.();
       unsubscribeTokenRefreshRef.current = null;
       if (firebaseUser) {
         await store.dispatch(restoreSession());
         await syncFcmToken();
 
-        console.log('[RootNavigator] Firebase auth ready, uid:', firebaseUser.uid);
+        // console.log('[RootNavigator] Firebase auth ready, uid:', firebaseUser.uid);
 
         unsubscribeRideRef.current = listenToActivePassengerRide(
           firebaseUser.uid,
@@ -94,6 +97,14 @@ function RootNavigator() {
           },
           (error) => {
             console.error('[rideListener] error:', error);
+          },
+        );
+
+        unsubscribeRiderRef.current = listenToRiderData(
+          firebaseUser.uid,
+          store.dispatch,
+          (error) => {
+            console.error('[riderListener] error:', error);
           },
         );
 
@@ -119,6 +130,8 @@ function RootNavigator() {
       unsubscribeAuth();
       unsubscribeRideRef.current?.();
       unsubscribeRideRef.current = null;
+      unsubscribeRiderRef.current?.();
+      unsubscribeRiderRef.current = null;
       unsubscribeTokenRefreshRef.current?.();
       unsubscribeTokenRefreshRef.current = null;
     };

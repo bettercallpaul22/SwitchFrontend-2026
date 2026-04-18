@@ -13,19 +13,24 @@ import {
 } from '@react-native-firebase/firestore';
 
 import { db } from '../config/firebase';
+import { buildDriverLocationPayload } from '../utils/driverLocation';
+import { buildPassengerLocationPayload } from '../utils/passengerLocation/payloadBuilder';
 import type { DriverLiveLocation } from '../store/driverLocationSlice';
+import type { PassengerLiveLocation } from '../store/passengerLocationSlice';
 import type { DriverRideRequestStatus } from '../types/driverRideRequest';
 import type { RideRequest } from '../types/ride';
 
 const PASSENGERS_COLLECTION = 'passengers';
 const DRIVERS_COLLECTION = 'drivers';
 const DRIVER_LOCATIONS_COLLECTION = 'driver_locations';
+const PASSENGER_LOCATIONS_COLLECTION = 'passenger_locations';
 const RIDES_COLLECTION = 'rides';
 const RIDE_OFFERS_COLLECTION = 'ride_offers';
 
 const passengersCollection = collection(db, PASSENGERS_COLLECTION);
 const driversCollection = collection(db, DRIVERS_COLLECTION);
 const driverLocationsCollection = collection(db, DRIVER_LOCATIONS_COLLECTION);
+const passengerLocationsCollection = collection(db, PASSENGER_LOCATIONS_COLLECTION);
 const ridesCollection = collection(db, RIDES_COLLECTION);
 const rideOffersCollection = collection(db, RIDE_OFFERS_COLLECTION);
 
@@ -38,6 +43,15 @@ export type DriverPresenceWritePayload = {
   activeRideId: string | null;
   updatedAt: string;
   location?: DriverLiveLocation | null;
+};
+
+export type PassengerPresenceWritePayload = {
+  passengerId: string;
+  isOnline: boolean;
+  isWaitingForRide: boolean;
+  activeRideId: string | null;
+  updatedAt: string;
+  location?: PassengerLiveLocation | null;
 };
 
 type RideOfferDocument = {
@@ -90,6 +104,32 @@ export const mergeUserFcmTokenDoc = async (
   await setDoc(userRef, payload, { merge: true });
 };
 
+/**
+ * Creates initial driver location document during registration
+ * Sets up driver_locations entry with offline status when driver signs up
+ */
+export const createInitialDriverLocationDoc = async (
+  driverId: string,
+  updatedAt: string
+) => {
+  const payload = {
+    driverId,
+    isOnline: false,
+    isAvailable: false,
+    activeRideId: null,
+    updatedAt,
+  };
+
+  const driverLocationRef = doc(driverLocationsCollection, driverId);
+  await setDoc(driverLocationRef, payload, { merge: false });
+
+  return payload;
+};
+
+/**
+ * Updates driver location and presence in driver_locations collection
+ * Consolidates all location/status data in one place for real-time matching
+ */
 export const upsertDriverPresence = async ({
   driverId,
   isOnline,
@@ -98,51 +138,19 @@ export const upsertDriverPresence = async ({
   updatedAt,
   location,
 }: DriverPresenceWritePayload) => {
-  // console.log(`[FirestoreApi] 🔄 UPSERT DRIVER PRESENCE START`, {
-  //   driverId,
-  //   isOnline,
-  //   isAvailable,
-  //   activeRideId,
-  //   hasLocation: !!location,
-  //   timestamp: updatedAt
-  // });
-
-  const startTime = Date.now();
-
-  const driverLocationPayload = {
+  const payload = buildDriverLocationPayload({
     driverId,
     isOnline,
     isAvailable,
     activeRideId,
     updatedAt,
-    ...(location
-      ? {
-          lat: location.latitude,
-          lng: location.longitude,
-          geohash: location.geohash,
-          heading: location.heading,
-          speed: location.speed,
-          accuracy: location.accuracy,
-        }
-      : {}),
-  };
+    location,
+  });
 
-  const driverDocRef = doc(driversCollection, driverId);
-  // console.log(`[FirestoreApi] 📝 Updating driver document: ${driverDocRef.path}`, driverLocationPayload);
-  
-  await updateDoc(driverDocRef, driverLocationPayload);
+  const driverLocationRef = doc(driverLocationsCollection, driverId);
+  await setDoc(driverLocationRef, payload, { merge: true });
 
-  
-
-  const duration = Date.now() - startTime;
-  
-  // console.log(`[FirestoreApi] ✅ UPSERT DRIVER PRESENCE SUCCESS`, {
-  //   driverId,
-  //   isOnline,
-  //   durationMs: duration,
-  // });
-
-  return driverLocationPayload;
+  return payload;
 };
 
 export const respondToRideOfferAndDriverPresence = async (input: {
@@ -220,19 +228,13 @@ export const respondToRideOfferAndDriverPresence = async (input: {
       const nextActiveRideId = input.status === 'accepted' ? input.rideId : null;
       const nextIsAvailable = input.status !== 'accepted';
 
-      const presencePayload = {
+      console.log('[Firestore] Updating driver_locations document...');
+      transaction.set(driverLocationRef, {
         driverId: input.driverId,
         activeRideId: nextActiveRideId,
         isAvailable: nextIsAvailable,
         updatedAt: input.updatedAt,
-      };
-
-      // Update driver profile and driver_locations with availability
-      console.log('[Firestore] Updating drivers document...', presencePayload);
-      transaction.set(driverRef, presencePayload, { merge: true });
-
-      console.log('[Firestore] Updating driver_locations document...');
-      transaction.set(driverLocationRef, presencePayload, { merge: true });
+      }, { merge: true });
 
       // On accept: update the ride document with status + driver info
       if (input.status === 'accepted') {
@@ -271,27 +273,110 @@ export const respondToRideOfferAndDriverPresence = async (input: {
   }
 };
 
+/**
+ * Clears driver's active ride and marks them as available
+ * Updates only driver_locations collection
+ */
 export const clearDriverActiveRide = async (driverId: string, updatedAt: string) => {
-  console.log('[Firestore] clearDriverActiveRide called', { driverId });
-
   try {
     const payload = {
-      driverId,
       activeRideId: null,
       isAvailable: true,
       updatedAt,
     };
-
-    await updateDoc(doc(driversCollection, driverId), payload);
-    console.log('[Firestore] clearDriverActiveRide completed successfully', { driverId });
+    await setDoc(doc(driverLocationsCollection, driverId), payload, { merge: true });
   } catch (error) {
     console.error('[Firestore] clearDriverActiveRide failed', {
       driverId,
-      errorMessage: error instanceof Error ? error.message : String(error),
       error,
     });
     throw error;
   }
+};
+
+// ============================================================================
+// PASSENGER LOCATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Creates initial passenger location document during registration
+ * Sets up passenger_locations entry when passenger signs up
+ */
+export const createInitialPassengerLocationDoc = async (
+  passengerId: string,
+  updatedAt: string
+) => {
+  const payload = {
+    passengerId,
+    isOnline: false,
+    isWaitingForRide: false,
+    activeRideId: null,
+    updatedAt,
+  };
+
+  const passengerLocationRef = doc(passengerLocationsCollection, passengerId);
+  await setDoc(passengerLocationRef, payload, { merge: false });
+
+  return payload;
+};
+
+/**
+ * Updates passenger location and presence in passenger_locations collection
+ * Consolidates all location/status data in one place
+ */
+export const upsertPassengerPresence = async ({
+  passengerId,
+  isOnline,
+  isWaitingForRide,
+  activeRideId,
+  updatedAt,
+  location,
+}: PassengerPresenceWritePayload) => {
+  const payload = buildPassengerLocationPayload({
+    passengerId,
+    isOnline,
+    isWaitingForRide,
+    activeRideId,
+    updatedAt,
+    location,
+  });
+
+  const passengerLocationRef = doc(passengerLocationsCollection, passengerId);
+  await setDoc(passengerLocationRef, payload, { merge: true });
+
+  return payload;
+};
+
+/**
+ * Sets passenger to offline state in passenger_locations
+ */
+export const setPassengerOfflineState = async (
+  passengerId: string,
+  updatedAt: string
+) => {
+  const passengerLocationRef = doc(passengerLocationsCollection, passengerId);
+  await updateDoc(passengerLocationRef, {
+    isOnline: false,
+    isWaitingForRide: false,
+    updatedAt,
+  });
+};
+
+/**
+ * Updates passenger ride status in passenger_locations
+ */
+export const updatePassengerRideStatus = async (
+  passengerId: string,
+  isWaitingForRide: boolean,
+  activeRideId: string | null,
+  updatedAt: string
+) => {
+  const passengerLocationRef = doc(passengerLocationsCollection, passengerId);
+  await updateDoc(passengerLocationRef, {
+    isWaitingForRide,
+    activeRideId,
+    updatedAt,
+  });
 };
 
 export const cancelRideRequestInFirestore = async ({
@@ -358,6 +443,35 @@ export const subscribePassengerRideDocuments = (
     ridesQuery,
     (snapshot) => {
       onNext(snapshot.docs.map((docItem) => ({ id: docItem.id, data: docItem.data() })));
+    },
+    (error) => {
+      onError?.(error);
+    }
+  );
+};
+
+/**
+ * Subscribe to real-time updates of a passenger profile document in Firestore.
+ * Fires whenever the passenger's profile data changes.
+ * 
+ * @param passengerId - The UID of the passenger
+ * @param onNext - Callback fired whenever the passenger data changes
+ * @param onError - Optional error callback
+ * @returns Unsubscribe function — call it to stop listening
+ */
+export const subscribePassengerProfileDocument = (
+  passengerId: string,
+  onNext: (data: FirebaseFirestoreTypes.DocumentData) => void,
+  onError?: (error: Error) => void
+): (() => void) => {
+  const passengerDocRef = doc(passengersCollection, passengerId);
+
+  return onSnapshot(
+    passengerDocRef,
+    (snapshot) => {
+      if (snapshot.exists) {
+        onNext(snapshot.data() || {});
+      }
     },
     (error) => {
       onError?.(error);

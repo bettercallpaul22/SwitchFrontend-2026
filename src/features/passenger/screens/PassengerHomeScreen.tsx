@@ -38,8 +38,9 @@ const getScreenBasedOnRideStatus = (
 ): FlowScreen => {
   switch (rideStatus) {
     case 'requested':
-    case 'accepted':
       return 'finding';
+    case 'accepted':
+      return 'accepted';
     case 'arrived':
       return 'arrived';
     case 'on_trip':
@@ -183,7 +184,12 @@ export function PassengerHomeScreen() {
   }, [rideData, screen, sessionUser]);
 
   useEffect(() => {
-    if (screen !== 'finding' && screen !== 'arrived' && screen !== 'en_route') {
+    if (
+      screen !== 'finding' &&
+      screen !== 'accepted' &&
+      screen !== 'arrived' &&
+      screen !== 'en_route'
+    ) {
       return;
     }
 
@@ -322,7 +328,13 @@ export function PassengerHomeScreen() {
       }).format(new Date(latestRide.createdAt))
     : '12:55 PM Friday, May 23, 2025';
 
-  if (screen === 'home' || screen === 'finding' || screen === 'arrived' || screen === 'en_route') {
+  if (
+    screen === 'home' ||
+    screen === 'finding' ||
+    screen === 'accepted' ||
+    screen === 'arrived' ||
+    screen === 'en_route'
+  ) {
     return (
       <>
          <HomeView
@@ -360,7 +372,8 @@ export function PassengerHomeScreen() {
         />
 
         <DriverArriveScreen
-          visible={screen === 'arrived'}
+          visible={screen === 'accepted' || screen === 'arrived'}
+          currentScreen={screen === 'accepted' ? 'accepted' : 'arrived'}
           topInset={insets.top}
           bottomInset={insets.bottom}
           mapRegion={mapRegion}
@@ -368,6 +381,7 @@ export function PassengerHomeScreen() {
           stopLocation={stopLocation}
           destinationLocation={destinationLocation}
           rideType={rideType}
+          avatarLabel={avatarLabel}
           switchCoinBalance={switchCoinBalance}
           paymentMethod={paymentMethod}
           driverName={activeDriverName}
@@ -376,6 +390,8 @@ export function PassengerHomeScreen() {
           onOpenChat={() => undefined}
           onOpenNotifications={() => undefined}
           onChangePaymentMethod={() => setScreen('vehicle')}
+          onCancelRide={onCancelRide}
+          cancelLoading={cancelStatus === 'loading'}
         />
 
         <EnRouteScreen

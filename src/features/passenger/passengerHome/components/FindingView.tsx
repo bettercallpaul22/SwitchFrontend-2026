@@ -5,6 +5,7 @@ import { AppButton } from '../../../../components/ui/AppButton';
 import { AppText } from '../../../../components/ui/AppText';
 import { BackButton } from './BackButton';
 import { styles } from '../styles';
+import { useAppSelector } from '../../../../store/hooks';
 
 type FindingViewProps = {
   avatarLabel: string;
@@ -25,6 +26,7 @@ function FindingViewComponent({
   cancelLoading,
   visible = true,
 }: FindingViewProps) {
+  const rideData = useAppSelector((state) => state.ride);
   return (
     <View style={[styles.findingScreen, !visible ? styles.hiddenScreen : null]}>
       {visible ? (

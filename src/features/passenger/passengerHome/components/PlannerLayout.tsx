@@ -157,6 +157,7 @@ export function PlannerLayout({
 
       {(currentScreen === 'vehicle' ||
         currentScreen === 'finding' ||
+        currentScreen === 'accepted' ||
         currentScreen === 'arrived' ||
         currentScreen === 'en_route') && (
        <BottomSheet2

@@ -7,6 +7,7 @@ import {
   LoginPayload,
   LoginResponseData,
   PassengerRideStatus,
+  PassengerUser,
   RegisterPayloadByRole,
   UserRole
 } from '../types/auth';
@@ -423,6 +424,35 @@ const authSlice = createSlice({
       };
       state.session.user.lastLocationUpdatedAt = action.payload.updatedAt;
       state.session.user.updatedAt = action.payload.updatedAt;
+    },
+    updatePassengerSessionLocation: (
+      state,
+      action: PayloadAction<{ lat: number; lng: number; updatedAt: string }>
+    ) => {
+      if (!state.session || state.session.user.role !== 'passenger') {
+        return;
+      }
+
+      state.session.user.lastKnownLocation = {
+        lat: action.payload.lat,
+        lng: action.payload.lng
+      };
+      state.session.user.lastLocationUpdatedAt = action.payload.updatedAt;
+      state.session.user.updatedAt = action.payload.updatedAt;
+    },
+    updateRiderData: (
+      state,
+      action: PayloadAction<Partial<PassengerUser>>
+    ) => {
+      if (!state.session || state.session.user.role !== 'passenger') {
+        return;
+      }
+
+      // Merge the Firestore data with the existing session user
+      state.session.user = {
+        ...state.session.user,
+        ...action.payload
+      };
     }
   },
   extraReducers: (builder) => {
@@ -512,6 +542,8 @@ export const {
   hydrateAuthStatus,
   updatePassengerRideState,
   updateSessionFcmToken,
-  updateDriverSessionLocation
+  updateDriverSessionLocation,
+  updatePassengerSessionLocation,
+  updateRiderData
 } = authSlice.actions;
 export const authReducer = authSlice.reducer;

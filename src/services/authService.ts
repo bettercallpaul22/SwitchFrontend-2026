@@ -12,6 +12,8 @@ import messaging from '@react-native-firebase/messaging';
 import { z } from 'zod';
 import {
   createDriverProfileDoc,
+  createInitialDriverLocationDoc,
+  createInitialPassengerLocationDoc,
   createPassengerProfileDoc,
   getDriverProfileDoc,
   getPassengerProfileDoc,
@@ -218,17 +220,6 @@ const storedDriverSchema = z
     email: z.string().email(),
     phone: phoneSchema,
     fcmToken: z.string().optional().default(''),
-    isOnline: z.boolean().optional().default(false),
-    isAvailable: z.boolean().optional().default(false),
-    activeRideId: z.string().trim().min(1).nullable().optional().default(null),
-    lastKnownLocation: z
-      .object({
-        lat: z.number().finite(),
-        lng: z.number().finite()
-      })
-      .optional(),
-    lastKnownGeohash: z.string().optional(),
-    lastLocationUpdatedAt: firestoreDateSchema.optional(),
     termsAccepted: z.literal(true),
     createdAt: firestoreDateSchema,
     updatedAt: firestoreDateSchema,
@@ -490,6 +481,9 @@ export const registerPassenger = async (input: PassengerRegisterPayload): Promis
 
     await createPassengerProfileDoc(uid, passengerDoc as unknown as Record<string, unknown>);
 
+    // Create initial passenger_locations document for real-time location tracking
+    await createInitialPassengerLocationDoc(uid, timestamp);
+
     console.log('[authService] registerPassenger:firestore-write-success', {
       uid,
       durationMs: Date.now() - startedAt
@@ -561,9 +555,6 @@ export const registerDriver = async (input: DriverRegisterPayload): Promise<Driv
       email: payload.email,
       phone: payload.phone,
       fcmToken,
-      isOnline: false,
-      isAvailable: false,
-      activeRideId: null,
       termsAccepted: true,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -575,7 +566,12 @@ export const registerDriver = async (input: DriverRegisterPayload): Promise<Driv
       ...(payload.preference ? { preference: payload.preference } : {})
     };
 
+    // Create driver profile document (static data)
     await createDriverProfileDoc(uid, driverDoc as unknown as Record<string, unknown>);
+
+    // Initialize driver location document (dynamic/real-time data)
+    // Ensures the driver has an entry in driver_locations from day 1
+    await createInitialDriverLocationDoc(uid, timestamp);
 
     console.log('[authService] registerDriver:firestore-write-success', {
       uid,
